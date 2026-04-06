@@ -1,7 +1,11 @@
 import ast
 import math
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
+
+from ai_solver import ClaudeVisionSolver
+from popup import MathSolverPopup
+from solver import solve_math_from_image
 
 
 class SafeEvaluator:
@@ -122,6 +126,7 @@ class AdvancedCalculator(tk.Tk):
         self.mode_var = tk.StringVar(value="RAD")
         self.theme_var = tk.StringVar(value="NIGHT")
         self.memory_value = 0.0
+        self.ai_solver = ClaudeVisionSolver()
 
         self._build_styles()
         self._build_ui()
@@ -242,6 +247,15 @@ class AdvancedCalculator(tk.Tk):
 
         controls = ttk.Frame(root, style="Root.TFrame")
         controls.pack(fill="x", pady=(10, 6))
+
+        image_solver_bar = ttk.Frame(controls, style="Root.TFrame")
+        image_solver_bar.pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            image_solver_bar,
+            text="📷 Solve from Image",
+            style="Accent.TButton",
+            command=self.solve_from_image,
+        ).pack(fill="x")
 
         top_controls = ttk.Frame(controls, style="Root.TFrame")
         top_controls.pack(fill="x")
@@ -395,6 +409,92 @@ class AdvancedCalculator(tk.Tk):
             self.memory_value -= self._current_numeric_value()
         except Exception:
             self.result_var.set("Error")
+
+    def solve_from_image(self):
+        file_path = filedialog.askopenfilename(
+            title="Select math image",
+            filetypes=[
+                ("Image Files", "*.jpg *.jpeg *.png *.webp"),
+                ("JPEG", "*.jpg *.jpeg"),
+                ("PNG", "*.png"),
+                ("WEBP", "*.webp"),
+            ],
+        )
+        if not file_path:
+            return
+
+        supported_ext = (".jpg", ".jpeg", ".png", ".webp")
+        if not file_path.lower().endswith(supported_ext):
+            self._show_solver_popup(
+                file_path,
+                {
+                    "success": False,
+                    "detected_question": "",
+                    "final_answer": "",
+                    "steps": [],
+                    "error_message": "Unsupported format",
+                },
+            )
+            return
+
+        loading_dialog = self._show_loading_dialog()
+        self.update_idletasks()
+
+        try:
+            result = solve_math_from_image(file_path)
+
+            if not result.success and self.ai_solver.is_available():
+                ai_payload = self.ai_solver.solve_from_image(file_path)
+                payload = {
+                    "success": ai_payload.get("success", False),
+                    "detected_question": ai_payload.get("detected_question", ""),
+                    "final_answer": ai_payload.get("final_answer", ""),
+                    "steps": ai_payload.get("steps", []),
+                    "error_message": ai_payload.get("error_message", ""),
+                }
+            else:
+                payload = {
+                    "success": result.success,
+                    "detected_question": result.detected_question,
+                    "final_answer": result.final_answer,
+                    "steps": result.steps,
+                    "error_message": result.error_message,
+                }
+        except Exception as exc:
+            payload = {
+                "success": False,
+                "detected_question": "",
+                "final_answer": "",
+                "steps": [],
+                "error_message": str(exc) if str(exc) else "Could not solve",
+            }
+        finally:
+            loading_dialog.destroy()
+
+        self._show_solver_popup(file_path, payload)
+
+    def _show_loading_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Processing")
+        dialog.geometry("320x120")
+        dialog.resizable(False, False)
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.configure(bg=self.colors["root"])
+
+        frame = ttk.Frame(dialog, style="Root.TFrame", padding=12)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(frame, text="Reading image and solving...", style="Display.TLabel", anchor="center").pack(fill="x", pady=(4, 10))
+        progress = ttk.Progressbar(frame, mode="indeterminate")
+        progress.pack(fill="x")
+        progress.start(12)
+        return dialog
+
+    def _show_solver_popup(self, image_path: str, payload: dict):
+        if not payload.get("success") and not payload.get("error_message"):
+            payload["error_message"] = "Could not solve"
+        MathSolverPopup(self, image_path=image_path, payload=payload, theme_mode=self.theme_var.get())
 
     def evaluate_expression(self):
         expr = self.expression_var.get().strip()
