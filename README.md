@@ -9,6 +9,8 @@ A modern scientific calculator desktop app built with Python and Tkinter.
 - Constants: `pi`, `e`, and reusable `ans`
 - Parentheses and decimal support
 - Degree/Radian mode toggle
+- Memory operations: `MC`, `MR`, `M+`, `M-`
+- Theme toggle: `NIGHT` and `DAY`
 - History panel with click-to-reuse expressions
 - Keyboard support:
   - `Enter` evaluate
@@ -24,4 +26,5 @@ python calculator_app.py
 ## Notes
 
 - In `DEG` mode, trigonometric functions (`sin`, `cos`, `tan`) treat input as degrees.
-- `asin`, `acos`, `atan` return radians by default.
+- In `DEG` mode, inverse trigonometric functions (`asin`, `acos`, `atan`) return degrees.
+- In `RAD` mode, all trigonometric functions use radians.

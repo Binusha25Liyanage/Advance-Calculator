@@ -50,16 +50,16 @@ class SafeEvaluator:
     def set_ans(self, value: float) -> None:
         self.ALLOWED_CONSTANTS["ans"] = value
 
-    def evaluate(self, expression: str) -> float:
+    def evaluate(self, expression: str, angle_mode: str = "RAD") -> float:
         expression = expression.strip()
         if not expression:
             raise ValueError("Empty expression")
 
         normalized = expression.replace("^", "**")
         node = ast.parse(normalized, mode="eval")
-        return float(self._eval_node(node.body))
+        return float(self._eval_node(node.body, angle_mode.upper()))
 
-    def _eval_node(self, node):
+    def _eval_node(self, node, angle_mode: str):
         if isinstance(node, ast.Constant):
             if isinstance(node.value, (int, float)):
                 return node.value
@@ -73,15 +73,15 @@ class SafeEvaluator:
         if isinstance(node, ast.BinOp):
             op_type = type(node.op)
             if op_type in self.ALLOWED_BIN_OPS:
-                left = self._eval_node(node.left)
-                right = self._eval_node(node.right)
+                left = self._eval_node(node.left, angle_mode)
+                right = self._eval_node(node.right, angle_mode)
                 return self.ALLOWED_BIN_OPS[op_type](left, right)
             raise ValueError("Operator not allowed")
 
         if isinstance(node, ast.UnaryOp):
             op_type = type(node.op)
             if op_type in self.ALLOWED_UNARY_OPS:
-                operand = self._eval_node(node.operand)
+                operand = self._eval_node(node.operand, angle_mode)
                 return self.ALLOWED_UNARY_OPS[op_type](operand)
             raise ValueError("Unary operator not allowed")
 
@@ -93,8 +93,16 @@ class SafeEvaluator:
             if func_name not in self.ALLOWED_FUNCTIONS:
                 raise ValueError(f"Function not allowed: {func_name}")
 
-            args = [self._eval_node(arg) for arg in node.args]
-            return self.ALLOWED_FUNCTIONS[func_name](*args)
+            args = [self._eval_node(arg, angle_mode) for arg in node.args]
+
+            if func_name in {"sin", "cos", "tan"} and len(args) == 1 and angle_mode == "DEG":
+                args[0] = math.radians(args[0])
+
+            result = self.ALLOWED_FUNCTIONS[func_name](*args)
+
+            if func_name in {"asin", "acos", "atan"} and angle_mode == "DEG":
+                return math.degrees(result)
+            return result
 
         raise ValueError("Unsupported expression")
 
@@ -112,6 +120,8 @@ class AdvancedCalculator(tk.Tk):
         self.expression_var = tk.StringVar()
         self.result_var = tk.StringVar(value="0")
         self.mode_var = tk.StringVar(value="RAD")
+        self.theme_var = tk.StringVar(value="NIGHT")
+        self.memory_value = 0.0
 
         self._build_styles()
         self._build_ui()
@@ -121,24 +131,60 @@ class AdvancedCalculator(tk.Tk):
         style = ttk.Style(self)
         style.theme_use("clam")
 
-        self.configure(bg="#111827")
+        if self.theme_var.get() == "NIGHT":
+            colors = {
+                "root": "#111827",
+                "panel": "#1F2937",
+                "display": "#0F172A",
+                "display_fg": "#E5E7EB",
+                "result_fg": "#22D3EE",
+                "button_bg": "#374151",
+                "button_active": "#4B5563",
+                "accent_bg": "#0EA5E9",
+                "accent_active": "#0284C7",
+                "warn_bg": "#EF4444",
+                "warn_active": "#DC2626",
+                "history_fg": "#9CA3AF",
+                "list_fg": "#CBD5E1",
+                "list_sel": "#334155",
+            }
+        else:
+            colors = {
+                "root": "#F4F6FB",
+                "panel": "#E7ECF5",
+                "display": "#FFFFFF",
+                "display_fg": "#111827",
+                "result_fg": "#0F766E",
+                "button_bg": "#D5DCE8",
+                "button_active": "#C3CDDD",
+                "accent_bg": "#2563EB",
+                "accent_active": "#1D4ED8",
+                "warn_bg": "#DC2626",
+                "warn_active": "#B91C1C",
+                "history_fg": "#334155",
+                "list_fg": "#1E293B",
+                "list_sel": "#BFDBFE",
+            }
 
-        style.configure("Root.TFrame", background="#111827")
-        style.configure("Panel.TFrame", background="#1F2937")
-        style.configure("Display.TFrame", background="#0F172A")
+        self.colors = colors
+        self.configure(bg=colors["root"])
+
+        style.configure("Root.TFrame", background=colors["root"])
+        style.configure("Panel.TFrame", background=colors["panel"])
+        style.configure("Display.TFrame", background=colors["display"])
 
         style.configure(
             "Display.TLabel",
-            background="#0F172A",
-            foreground="#E5E7EB",
+            background=colors["display"],
+            foreground=colors["display_fg"],
             font=("Segoe UI", 16, "bold"),
             anchor="e",
         )
 
         style.configure(
             "Result.TLabel",
-            background="#0F172A",
-            foreground="#22D3EE",
+            background=colors["display"],
+            foreground=colors["result_fg"],
             font=("Segoe UI", 24, "bold"),
             anchor="e",
         )
@@ -147,39 +193,39 @@ class AdvancedCalculator(tk.Tk):
             "Calc.TButton",
             font=("Segoe UI", 12, "bold"),
             padding=8,
-            foreground="#E5E7EB",
-            background="#374151",
+            foreground=colors["display_fg"],
+            background=colors["button_bg"],
             borderwidth=0,
             focuscolor="",
         )
-        style.map("Calc.TButton", background=[("active", "#4B5563")])
+        style.map("Calc.TButton", background=[("active", colors["button_active"])])
 
         style.configure(
             "Accent.TButton",
             font=("Segoe UI", 12, "bold"),
             padding=8,
-            foreground="#E5E7EB",
-            background="#0EA5E9",
+            foreground="#F9FAFB",
+            background=colors["accent_bg"],
             borderwidth=0,
             focuscolor="",
         )
-        style.map("Accent.TButton", background=[("active", "#0284C7")])
+        style.map("Accent.TButton", background=[("active", colors["accent_active"])])
 
         style.configure(
             "Warn.TButton",
             font=("Segoe UI", 12, "bold"),
             padding=8,
-            foreground="#E5E7EB",
-            background="#EF4444",
+            foreground="#F9FAFB",
+            background=colors["warn_bg"],
             borderwidth=0,
             focuscolor="",
         )
-        style.map("Warn.TButton", background=[("active", "#DC2626")])
+        style.map("Warn.TButton", background=[("active", colors["warn_active"])])
 
         style.configure(
             "History.TLabel",
-            background="#1F2937",
-            foreground="#9CA3AF",
+            background=colors["panel"],
+            foreground=colors["history_fg"],
             font=("Consolas", 10),
             anchor="w",
         )
@@ -197,10 +243,26 @@ class AdvancedCalculator(tk.Tk):
         controls = ttk.Frame(root, style="Root.TFrame")
         controls.pack(fill="x", pady=(10, 6))
 
-        ttk.Button(controls, text="AC", style="Warn.TButton", command=self.clear).pack(side="left", expand=True, fill="x", padx=(0, 4))
-        ttk.Button(controls, text="DEL", style="Calc.TButton", command=self.delete_last).pack(side="left", expand=True, fill="x", padx=4)
-        ttk.Button(controls, text="ANS", style="Calc.TButton", command=lambda: self.insert_text("ans")).pack(side="left", expand=True, fill="x", padx=4)
-        ttk.Button(controls, text="=", style="Accent.TButton", command=self.evaluate_expression).pack(side="left", expand=True, fill="x", padx=(4, 0))
+        top_controls = ttk.Frame(controls, style="Root.TFrame")
+        top_controls.pack(fill="x")
+        ttk.Button(top_controls, text="AC", style="Warn.TButton", command=self.clear).pack(side="left", expand=True, fill="x", padx=(0, 4))
+        ttk.Button(top_controls, text="DEL", style="Calc.TButton", command=self.delete_last).pack(side="left", expand=True, fill="x", padx=4)
+        ttk.Button(top_controls, text="ANS", style="Calc.TButton", command=lambda: self.insert_text("ans")).pack(side="left", expand=True, fill="x", padx=4)
+        ttk.Button(top_controls, text="=", style="Accent.TButton", command=self.evaluate_expression).pack(side="left", expand=True, fill="x", padx=(4, 0))
+
+        memory_controls = ttk.Frame(controls, style="Root.TFrame")
+        memory_controls.pack(fill="x", pady=(6, 0))
+        ttk.Button(memory_controls, text="MC", style="Calc.TButton", command=self.memory_clear).pack(side="left", expand=True, fill="x", padx=(0, 3))
+        ttk.Button(memory_controls, text="MR", style="Calc.TButton", command=self.memory_recall).pack(side="left", expand=True, fill="x", padx=3)
+        ttk.Button(memory_controls, text="M+", style="Calc.TButton", command=self.memory_add).pack(side="left", expand=True, fill="x", padx=3)
+        ttk.Button(memory_controls, text="M-", style="Calc.TButton", command=self.memory_subtract).pack(side="left", expand=True, fill="x", padx=3)
+        self.theme_button = ttk.Button(
+            memory_controls,
+            text=f"{self.theme_var.get()}",
+            style="Accent.TButton",
+            command=self.toggle_theme,
+        )
+        self.theme_button.pack(side="left", expand=True, fill="x", padx=(3, 0))
 
         keypad = ttk.Frame(root, style="Root.TFrame")
         keypad.pack(fill="both", expand=True)
@@ -247,10 +309,10 @@ class AdvancedCalculator(tk.Tk):
         self.history_list = tk.Listbox(
             history_panel,
             height=6,
-            bg="#1F2937",
-            fg="#CBD5E1",
+            bg=self.colors["panel"],
+            fg=self.colors["list_fg"],
             highlightthickness=0,
-            selectbackground="#334155",
+            selectbackground=self.colors["list_sel"],
             relief="flat",
             font=("Consolas", 10),
         )
@@ -286,37 +348,53 @@ class AdvancedCalculator(tk.Tk):
             self.mode_var.set("RAD")
         self.mode_button.config(text=self.mode_var.get())
 
-    def _preprocess_expression(self, expression: str) -> str:
-        if self.mode_var.get() == "DEG":
-            for fn in ("sin", "cos", "tan"):
-                expression = expression.replace(f"{fn}(", f"{fn}(rad(")
-                expression = self._close_rad_argument(expression, fn)
-        return expression
+    def toggle_theme(self):
+        if self.theme_var.get() == "NIGHT":
+            self.theme_var.set("DAY")
+        else:
+            self.theme_var.set("NIGHT")
+        self.theme_button.config(text=self.theme_var.get())
+        self._build_styles()
+        self._refresh_history_style()
 
-    @staticmethod
-    def _close_rad_argument(expression: str, fn_name: str) -> str:
-        """
-        Balance inserted rad( by injecting a closing parenthesis before
-        the matching function closing parenthesis.
-        """
-        target = f"{fn_name}(rad("
-        idx = expression.find(target)
-        while idx != -1:
-            start = idx + len(target)
-            depth = 1
-            i = start
-            while i < len(expression):
-                ch = expression[i]
-                if ch == "(":
-                    depth += 1
-                elif ch == ")":
-                    depth -= 1
-                    if depth == 0:
-                        expression = expression[:i] + ")" + expression[i:]
-                        break
-                i += 1
-            idx = expression.find(target, idx + len(target) + 1)
-        return expression
+    def _refresh_history_style(self):
+        self.history_list.configure(
+            bg=self.colors["panel"],
+            fg=self.colors["list_fg"],
+            selectbackground=self.colors["list_sel"],
+        )
+
+    def _current_numeric_value(self) -> float:
+        if self.result_var.get() not in {"", "Error"}:
+            try:
+                return float(self.result_var.get())
+            except ValueError:
+                pass
+
+        expr = self.expression_var.get().strip()
+        if not expr:
+            raise ValueError("No value available")
+        return self.evaluator.evaluate(expr, self.mode_var.get())
+
+    def memory_clear(self):
+        self.memory_value = 0.0
+
+    def memory_recall(self):
+        current = self.expression_var.get()
+        value = f"{self.memory_value:.12g}"
+        self.expression_var.set(current + value)
+
+    def memory_add(self):
+        try:
+            self.memory_value += self._current_numeric_value()
+        except Exception:
+            self.result_var.set("Error")
+
+    def memory_subtract(self):
+        try:
+            self.memory_value -= self._current_numeric_value()
+        except Exception:
+            self.result_var.set("Error")
 
     def evaluate_expression(self):
         expr = self.expression_var.get().strip()
@@ -325,8 +403,7 @@ class AdvancedCalculator(tk.Tk):
             return
 
         try:
-            processed = self._preprocess_expression(expr)
-            value = self.evaluator.evaluate(processed)
+            value = self.evaluator.evaluate(expr, self.mode_var.get())
             self.evaluator.set_ans(value)
 
             display_value = f"{value:.12g}"
