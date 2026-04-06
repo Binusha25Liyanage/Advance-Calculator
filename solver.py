@@ -131,22 +131,30 @@ def _solve_single_equation(problem: str) -> SolveResult:
         a, b, c = polynomial.all_coeffs()
         discriminant = sp.simplify(b**2 - 4 * a * c)
         roots = sp.solve(equation, target)
+        if len(roots) == 1:
+            formatted_roots = f"{target} = {sp.sstr(roots[0])}"
+        else:
+            formatted_roots = f"{target} in {{{', '.join(sp.sstr(root) for root in roots)}}}"
         steps.extend(
             [
                 f"Step 3: Identify quadratic coefficients -> a={sp.sstr(a)}, b={sp.sstr(b)}, c={sp.sstr(c)}",
                 f"Step 4: Compute discriminant -> Delta = b^2 - 4ac = {sp.sstr(discriminant)}",
-                f"Step 5: Solve for roots -> {target} = {sp.sstr(roots)}",
+                f"Step 5: Solve for roots -> {formatted_roots}",
             ]
         )
-        return SolveResult(True, problem, f"{target} = {sp.sstr(roots)}", steps)
+        return SolveResult(True, problem, formatted_roots, steps)
 
     solutions = sp.solve(equation, target, dict=True)
     if not solutions:
         return SolveResult(False, problem, "", [], "Could not solve")
 
     solved_values = [sp.sstr(solution[target]) for solution in solutions if target in solution]
-    steps.append(f"Step 3: Solve for {target} -> {target} = {solved_values}")
-    return SolveResult(True, problem, f"{target} = {solved_values}", steps)
+    if len(solved_values) == 1:
+        formatted_answer = f"{target} = {solved_values[0]}"
+    else:
+        formatted_answer = f"{target} in {{{', '.join(solved_values)}}}"
+    steps.append(f"Step 3: Solve for {target} -> {formatted_answer}")
+    return SolveResult(True, problem, formatted_answer, steps)
 
 
 def _solve_system(problem: str) -> SolveResult:
